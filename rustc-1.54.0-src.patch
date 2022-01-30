@@ -273,3 +273,22 @@ index 49347431..8afccb3f 100644
  
  using namespace llvm;
  
+--- library/std/src/sys/unix/condvar.rs
++++ library/std/src/sys/unix/condvar.rs
+@@ -157,14 +157,14 @@ impl Condvar {
+     }
+
+     #[inline]
+-    #[cfg(not(target_os = "dragonfly"))]
++    #[cfg(all(not(target_os = "dragonfly"), not(target_os = "macos")))]
+     pub unsafe fn destroy(&self) {
+         let r = libc::pthread_cond_destroy(self.inner.get());
+         debug_assert_eq!(r, 0);
+     }
+
+     #[inline]
+-    #[cfg(target_os = "dragonfly")]
++    #[cfg(any(target_os = "dragonfly", target_os = "macos"))]
+     pub unsafe fn destroy(&self) {
+         let r = libc::pthread_cond_destroy(self.inner.get());
+         // On DragonFly pthread_cond_destroy() returns EINVAL if called on
