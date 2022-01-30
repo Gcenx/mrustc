@@ -100,7 +100,7 @@
 # PPV-Lite also needs to know that we're pretending to be miri
 --- vendor/ppv-lite86/src/lib.rs
 +++ vendor/ppv-lite86/src/lib.rs
-@@ -12,9 +12,9 @@
+@@ -12,10 +12,10 @@
 -#[cfg(all(feature = "simd", target_arch = "x86_64", not(miri)))]
 +#[cfg(all(feature = "simd", target_arch = "x86_64", not(miri), not(rust_compiler = "mrustc")))]
  pub mod x86_64;
@@ -115,3 +115,59 @@
 +#[cfg(any(miri, rust_compiler = "mrustc", not(all(feature = "simd", any(target_arch = "x86_64")))))]
  use self::generic as arch;
 
+#
+# Switch to emulated TLV
+#
+--- library/std/src/sys/unix/thread_local_dtor.rs
++++ library/std/src/sys/unix/thread_local_dtor.rs
+@@ -61,7 +61,7 @@ pub unsafe fn register_dtor(t: *mut u8, dtor: unsafe extern "C" fn(*mut u8)) {
+     #[thread_local]
+     static REGISTERED: Cell<bool> = Cell::new(false);
+     if !REGISTERED.get() {
+-        _tlv_atexit(run_dtors, ptr::null_mut());
++        __cxa_thread_atexit(run_dtors, ptr::null_mut());
+         REGISTERED.set(true);
+     }
+ 
+@@ -75,7 +75,7 @@ pub unsafe fn register_dtor(t: *mut u8, dtor: unsafe extern "C" fn(*mut u8)) {
+     }
+ 
+     extern "C" {
+-        fn _tlv_atexit(dtor: unsafe extern "C" fn(*mut u8), arg: *mut u8);
++        fn __cxa_thread_atexit(dtor: unsafe extern "C" fn(*mut u8), arg: *mut u8);
+     }
+ 
+     let list: &mut List = &mut *DTORS.get();
+--- src/llvm-project/clang/lib/Basic/Targets/OSTargets.h
++++ src/llvm-project/clang/lib/Basic/Targets/OSTargets.h
+@@ -92,7 +92,7 @@ public:
+     this->TLSSupported = false;
+
+     if (Triple.isMacOSX())
+-      this->TLSSupported = !Triple.isMacOSXVersionLT(10, 7);
++      this->TLSSupported = !Triple.isMacOSXVersionLT(10, 4);
+     else if (Triple.isiOS()) {
+       // 64-bit iOS supported it from 8 onwards, 32-bit device from 9 onwards,
+       // 32-bit simulator from 10 onwards.
+--- src/llvm-project/clang/lib/CodeGen/ItaniumCXXABI.cpp
++++ src/llvm-project/clang/lib/CodeGen/ItaniumCXXABI.cpp
+@@ -2487,7 +2487,7 @@ static void emitGlobalDtorWithCXAAtExit(CodeGenFunction &CGF,
+   const char *Name = "__cxa_atexit";
+   if (TLS) {
+     const llvm::Triple &T = CGF.getTarget().getTriple();
+-    Name = T.isOSDarwin() ?  "_tlv_atexit" : "__cxa_thread_atexit";
++    Name = (T.isOSDarwin() && !T.isMacOSXVersionLT(10, 7)) ?  "_tlv_atexit" : "__cxa_thread_atexit";
+   }
+
+   // We're assuming that the destructor function is something we can
+--- src/llvm-project/llvm/include/llvm/ADT/Triple.h
++++ src/llvm-project/llvm/include/llvm/ADT/Triple.h
+@@ -809,7 +809,7 @@ public:
+
+   /// Tests whether the target uses emulated TLS as default.
+   bool hasDefaultEmulatedTLS() const {
+-    return isAndroid() || isOSOpenBSD() || isWindowsCygwinEnvironment();
++    return isAndroid() || isOSOpenBSD() || isWindowsCygwinEnvironment() || isMacOSXVersionLT(10, 7);
+   }
+
+   /// Tests whether the target uses -data-sections as default.
