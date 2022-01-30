@@ -85,6 +85,7 @@ endif
 LINKFLAGS += $(LINKFLAGS_EXTRA)
 
 BIN := bin/mrustc$(EXESUF)
+MINICARGO := bin/minicargo$(EXESUF)
 
 OBJ := main.o version.o
 OBJ += span.o rc_string.o debug.o ident.o
@@ -169,7 +170,9 @@ RUSTC_SRC_DL := $(RUSTCSRC)/dl-version
 MAKE_MINICARGO = $(MAKE) -f minicargo.mk RUSTC_VERSION=$(RUSTC_VERSION) RUSTC_CHANNEL=$(RUSTC_SRC_TY) OUTDIR_SUF=$(OUTDIR_SUF)
 
 
-output$(OUTDIR_SUF)/libstd.rlib: $(RUSTC_SRC_DL) $(BIN)
+$(MINICARGO): $(RUSTC_SRC_DL) $(BIN)
+	$(MAKE_MINICARGO) $@
+output$(OUTDIR_SUF)/libstd.rlib: $(MINICARGO)
 	$(MAKE_MINICARGO) $@
 output$(OUTDIR_SUF)/libtest.rlib output$(OUTDIR_SUF)/libpanic_unwind.rlib output$(OUTDIR_SUF)/libproc_macro.rlib: output$(OUTDIR_SUF)/libstd.rlib
 	$(MAKE_MINICARGO) $@
@@ -335,7 +338,7 @@ src/main.cpp: $(PCHS:%=src/%.gch)
 
 bin/common_lib.a:
 	$(MAKE) -C tools/common
-	
+
 -include $(OBJ:%=%.dep)
 
 # vim: noexpandtab ts=4
