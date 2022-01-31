@@ -82,7 +82,8 @@ ifneq ($(GPROF),)
   EXESUF := -gprof$(EXESUF)
 endif
 
-BIN := bin/mrustc$(EXESUF)
+MRUSTC ?= bin/mrustc$(EXESUF)
+MINICARGO ?= bin/minicargo$(EXESUF)
 
 OBJ := main.o version.o
 OBJ += span.o rc_string.o debug.o ident.o
@@ -142,10 +143,10 @@ PCHS := ast/ast.hpp
 OBJ := $(addprefix $(OBJDIR),$(OBJ))
 
 
-all: $(BIN)
+all: $(MRUSTC)
 
 clean:
-	$(RM) -r $(BIN) $(OBJ) bin/mrustc.a
+	$(RM) -r $(MRUSTC) $(OBJ) bin/mrustc.a
 
 
 PIPECMD ?= 2>&1 | tee $@_dbg.txt | tail -n $(TAIL_COUNT) ; test $${PIPESTATUS[0]} -eq 0
@@ -167,7 +168,9 @@ RUSTC_SRC_DL := $(RUSTCSRC)/dl-version
 MAKE_MINICARGO = $(MAKE) -f minicargo.mk RUSTC_VERSION=$(RUSTC_VERSION) RUSTC_CHANNEL=$(RUSTC_SRC_TY) OUTDIR_SUF=$(OUTDIR_SUF)
 
 
-output$(OUTDIR_SUF)/libstd.rlib: $(RUSTC_SRC_DL) $(BIN)
+$(MINICARGO): $(RUSTC_SRC_DL) $(MRUSTC)
+	$(MAKE_MINICARGO) $@
+output$(OUTDIR_SUF)/libstd.rlib: $(MINICARGO)
 	$(MAKE_MINICARGO) $@
 output$(OUTDIR_SUF)/libtest.rlib output$(OUTDIR_SUF)/libpanic_unwind.rlib output$(OUTDIR_SUF)/libproc_macro.rlib: output$(OUTDIR_SUF)/libstd.rlib
 	$(MAKE_MINICARGO) $@
@@ -282,7 +285,7 @@ endif
 output$(OUTDIR_SUF)/rust/test_run-pass_hello: $(RUST_TESTS_DIR)$(HELLO_TEST) $(TEST_DEPS)
 	@mkdir -p $(dir $@)
 	@echo "--- [MRUSTC] -o $@"
-	$(DBG) $(BIN) $< -o $@ $(RUST_FLAGS) $(PIPECMD)
+	$(DBG) $(MRUSTC) $< -o $@ $(RUST_FLAGS) $(PIPECMD)
 output$(OUTDIR_SUF)/rust/test_run-pass_hello_out.txt: output$(OUTDIR_SUF)/rust/test_run-pass_hello
 	@echo "--- [$<]"
 	@./$< | tee $@
@@ -302,7 +305,7 @@ else
 	$Var rcD $@ $(filter-out $(OBJDIR)main.o, $(OBJ))
 endif
 
-$(BIN): $(OBJDIR)main.o bin/mrustc.a bin/common_lib.a
+$(MRUSTC): $(OBJDIR)main.o bin/mrustc.a bin/common_lib.a
 	@+mkdir -p $(dir $@)
 	@echo [CXX] -o $@
 ifeq ($(OS),Windows_NT)
@@ -311,9 +314,9 @@ else ifeq ($(shell uname -s || echo not),Darwin)
 	$V$(CXX) -o $@ $(LINKFLAGS) $(OBJDIR)main.o -Wl,-all_load bin/mrustc.a bin/common_lib.a $(LIBS)
 else
 	$V$(CXX) -o $@ $(LINKFLAGS) $(OBJDIR)main.o -Wl,--whole-archive bin/mrustc.a -Wl,--no-whole-archive bin/common_lib.a $(LIBS)
-	objcopy --only-keep-debug $(BIN) $(BIN).debug
-	objcopy --add-gnu-debuglink=$(BIN).debug $(BIN)
-	strip $(BIN)
+	objcopy --only-keep-debug $(MRUSTC) $(MRUSTC).debug
+	objcopy --add-gnu-debuglink=$(MRUSTC).debug $(MRUSTC)
+	strip $(MRUSTC)
 endif
 
 $(OBJDIR)%.o: src/%.cpp
@@ -333,7 +336,7 @@ src/main.cpp: $(PCHS:%=src/%.gch)
 
 bin/common_lib.a:
 	$(MAKE) -C tools/common
-	
+
 -include $(OBJ:%=%.dep)
 
 # vim: noexpandtab ts=4
